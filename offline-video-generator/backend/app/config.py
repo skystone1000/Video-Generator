@@ -21,10 +21,15 @@ class Settings(BaseSettings):
     video_runtime: str = "mock"
     mock_sample_mp4_path: str | None = None
 
-    hunyuan_original_repo_path: str = "/models/HunyuanVideo"
-    hunyuan_original_ckpt_path: str = "/models/HunyuanVideo/ckpts"
-    hunyuan_15_repo_path: str = "/models/HunyuanVideo-1.5"
-    hunyuan_15_model_path: str = "/models/HunyuanVideo-1.5/weights"
+    hunyuan_original_repo_path: str = "../../models/HunyuanVideo"
+    hunyuan_original_ckpt_path: str = "../../models/HunyuanVideo/ckpts"
+    hunyuan_15_repo_path: str = "../../models/HunyuanVideo-1.5"
+    hunyuan_15_model_path: str = "../../models/HunyuanVideo-1.5/ckpts"
+    hunyuan_15_torchrun_path: str = "torchrun"
+    hunyuan_15_nproc_per_node: int = 1
+    hunyuan_15_enable_sr: bool = False
+    hunyuan_15_use_sage_attn: bool = False
+    hunyuan_15_enable_cache: bool = False
 
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"

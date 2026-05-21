@@ -51,16 +51,16 @@ Set these paths in `backend/.env`:
 
 ```text
 VIDEO_RUNTIME=hunyuan_original
-HUNYUAN_ORIGINAL_REPO_PATH=/models/HunyuanVideo
-HUNYUAN_ORIGINAL_CKPT_PATH=/models/HunyuanVideo/ckpts
+HUNYUAN_ORIGINAL_REPO_PATH=../../models/HunyuanVideo
+HUNYUAN_ORIGINAL_CKPT_PATH=../../models/HunyuanVideo/ckpts
 ```
 
 or:
 
 ```text
 VIDEO_RUNTIME=hunyuan_15
-HUNYUAN_15_REPO_PATH=/models/HunyuanVideo-1.5
-HUNYUAN_15_MODEL_PATH=/models/HunyuanVideo-1.5/weights
+HUNYUAN_15_REPO_PATH=../../models/HunyuanVideo-1.5
+HUNYUAN_15_MODEL_PATH=../../models/HunyuanVideo-1.5/ckpts
 ```
 
 The adapters intentionally shell out with argument arrays, not `shell=True`. Check the local upstream repos before running real inference and update the adapter command builders if the upstream scripts differ.

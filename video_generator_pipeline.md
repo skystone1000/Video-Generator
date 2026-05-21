@@ -15,10 +15,11 @@ Current first slice:
 - HunyuanVideo and HunyuanVideo-1.5 subprocess adapter scaffolds.
 - React + Vite creator workspace wired to backend APIs.
 - Offline bootstrap/runtime docs and focused backend tests.
+- `ffmpeg`/`ffprobe` installed locally via Homebrew and mock MP4 generation verified.
+- HunyuanVideo-1.5 adapter updated to upstream `torchrun ... generate.py` command shape.
 
 Next priority:
 
-- Configure `ffmpeg` or `MOCK_SAMPLE_MP4_PATH` so mock generation can complete locally.
 - Check the actual local Hunyuan repos before running real adapter commands.
 - Add cancellation support for active Hunyuan subprocesses once the real command shape is verified.
 
@@ -256,11 +257,11 @@ LOG_DIR=./data/logs
 
 VIDEO_RUNTIME=mock
 
-HUNYUAN_ORIGINAL_REPO_PATH=/models/HunyuanVideo
-HUNYUAN_ORIGINAL_CKPT_PATH=/models/HunyuanVideo/ckpts
+HUNYUAN_ORIGINAL_REPO_PATH=../../models/HunyuanVideo
+HUNYUAN_ORIGINAL_CKPT_PATH=../../models/HunyuanVideo/ckpts
 
-HUNYUAN_15_REPO_PATH=/models/HunyuanVideo-1.5
-HUNYUAN_15_MODEL_PATH=/models/HunyuanVideo-1.5/weights
+HUNYUAN_15_REPO_PATH=../../models/HunyuanVideo-1.5
+HUNYUAN_15_MODEL_PATH=../../models/HunyuanVideo-1.5/ckpts
 
 FFMPEG_PATH=ffmpeg
 

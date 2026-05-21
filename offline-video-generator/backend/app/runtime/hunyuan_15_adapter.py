@@ -1,5 +1,6 @@
 import subprocess
 from pathlib import Path
+import shutil
 
 from ..config import get_settings
 from .base import GenerationResult, ProgressCallback, VideoGenerationAdapter
@@ -9,6 +10,12 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
     name = "hunyuan_15"
     model_version = "Tencent-Hunyuan/HunyuanVideo-1.5"
 
+    def _resolve_executable(self, raw_path: str) -> str:
+        if "/" in raw_path or "\\" in raw_path or raw_path.startswith("."):
+            resolved = get_settings().resolve_path(raw_path)
+            return str(resolved) if resolved is not None else raw_path
+        return raw_path
+
     def validate(self) -> None:
         settings = get_settings()
         repo_path = settings.resolve_path(settings.hunyuan_15_repo_path)
@@ -17,11 +24,17 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
             raise RuntimeError(f"HunyuanVideo-1.5 repo path is missing: {repo_path}")
         if model_path is None or not model_path.exists():
             raise RuntimeError(f"HunyuanVideo-1.5 model path is missing: {model_path}")
-        script_path = repo_path / "sample_video.py"
+        script_path = repo_path / "generate.py"
         if not script_path.exists():
             raise RuntimeError(
-                f"HunyuanVideo-1.5 sample script is missing: {script_path}. "
+                f"HunyuanVideo-1.5 generate script is missing: {script_path}. "
                 "Update Hunyuan15Adapter.build_command if the upstream entrypoint has changed."
+            )
+        torchrun_path = self._resolve_executable(settings.hunyuan_15_torchrun_path)
+        if shutil.which(torchrun_path) is None and not Path(torchrun_path).exists():
+            raise RuntimeError(
+                f"HunyuanVideo-1.5 torchrun executable is missing: {torchrun_path}. "
+                "Install PyTorch in the runtime environment or set HUNYUAN_15_TORCHRUN_PATH."
             )
 
     def load(self) -> None:
@@ -35,32 +48,44 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
         assert model_path is not None
 
         command = [
-            "python3",
-            str(repo_path / "sample_video.py"),
-            "--model-path",
-            str(model_path),
+            self._resolve_executable(settings.hunyuan_15_torchrun_path),
+            f"--nproc_per_node={settings.hunyuan_15_nproc_per_node}",
+            str(repo_path / "generate.py"),
             "--prompt",
             request.prompt,
-            "--negative-prompt",
+            "--negative_prompt",
             request.negative_prompt,
             "--resolution",
             request.resolution,
-            "--video-size",
-            str(request.height),
-            str(request.width),
-            "--video-length",
-            str(request.video_length),
-            "--infer-steps",
+            "--model_path",
+            str(model_path),
+            "--aspect_ratio",
+            request.aspect_ratio,
+            "--num_inference_steps",
             str(request.steps),
+            "--video_length",
+            str(request.video_length),
             "--seed",
             str(request.seed),
-            "--save-path",
-            str(output_dir),
+            "--image_path",
+            "none",
+            "--output_path",
+            str(output_dir / "output.mp4"),
+            "--rewrite",
+            "true" if request.rewrite_prompt else "false",
+            "--offloading",
+            "true" if request.use_cpu_offload else "false",
+            "--sr",
+            "true" if settings.hunyuan_15_enable_sr else "false",
+            "--use_sageattn",
+            "true" if settings.hunyuan_15_use_sage_attn else "false",
+            "--enable_cache",
+            "true" if settings.hunyuan_15_enable_cache else "false",
         ]
         if request.use_cpu_offload:
-            command.append("--use-cpu-offload")
+            command.extend(["--group_offloading", "true"])
         if request.use_fp8:
-            command.append("--use-fp8")
+            command.extend(["--use_fp8_gemm", "true"])
         return command
 
     def generate(self, request, output_dir: str | Path, progress: ProgressCallback) -> GenerationResult:
