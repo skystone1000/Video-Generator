@@ -7,9 +7,13 @@ The app lives inside the cloned project root. Models are stored separately on an
 ```text
 <PROJECT_ROOT>\
   README.md
-  installation.md
+  CLAUDE.md
   docs\
+    installation.md
     models_setup.md
+    ARCHITECTURE.md
+    CODEBASE.md
+    FEATURES.md
   offline-video-generator\
     .env.example
     backend\
@@ -240,7 +244,7 @@ Optional but recommended:
 huggingface-cli login
 ```
 
-For download links, exact file placement, and per-model instructions see **[docs/models_setup.md](docs/models_setup.md)**.
+For download links, exact file placement, and per-model instructions see **[models_setup.md](models_setup.md)**.
 
 The minimum set for 480p text-to-video:
 
@@ -481,7 +485,7 @@ Hunyuan model path errors:
 - Confirm `HUNYUAN_15_REPO_PATH` in `backend\.env` points to the folder containing `generate.py`.
 - Confirm `HUNYUAN_15_MODEL_PATH` points to the `ckpts` folder containing `transformer\`, `vae\`, and `text_encoder\`.
 - Both must be **absolute paths**. Relative paths will not resolve correctly when the backend runs.
-- See [docs/models_setup.md](docs/models_setup.md) for the expected directory structure.
+- See [models_setup.md](models_setup.md) for the expected directory structure.
 
 Out of memory:
 
@@ -522,7 +526,7 @@ Use this prompt if you want another LLM to perform the native Windows setup:
 ```text
 You are setting up a native Windows local text-to-video app using HunyuanVideo-1.5 on a Windows machine with an NVIDIA GPU.
 
-Follow installation.md exactly. Use native PowerShell, not WSL. Install Git, Git LFS, Python 3.10, Node LTS, ffmpeg, Visual Studio Build Tools, and the NVIDIA driver. Clone or copy the app, cd into the project root, define PROJECT_ROOT/APP_ROOT/BACKEND_ROOT/FRONTEND_ROOT/HUNYUAN_ROOT/CKPTS_ROOT variables as shown (HUNYUAN_ROOT and CKPTS_ROOT point to external drives, not inside the project). Create the backend venv at offline-video-generator\backend\.venv, install CUDA-enabled PyTorch, verify torch.cuda.is_available() is true, install the app backend, clone Tencent-Hunyuan/HunyuanVideo-1.5 to your chosen HUNYUAN_ROOT, apply the Windows generate.py HashStore patch from step 5, install Hunyuan requirements into the same backend venv, download checkpoints per docs/models_setup.md into CKPTS_ROOT, run the direct python smoke test with --rewrite false and --sr false, configure backend\.env with absolute paths for HUNYUAN_15_REPO_PATH and HUNYUAN_15_MODEL_PATH, then run backend and frontend.
+Follow docs/installation.md exactly. Use native PowerShell, not WSL. Install Git, Git LFS, Python 3.10, Node LTS, ffmpeg, Visual Studio Build Tools, and the NVIDIA driver. Clone or copy the app, cd into the project root, define PROJECT_ROOT/APP_ROOT/BACKEND_ROOT/FRONTEND_ROOT/HUNYUAN_ROOT/CKPTS_ROOT variables as shown (HUNYUAN_ROOT and CKPTS_ROOT point to external drives, not inside the project). Create the backend venv at offline-video-generator\backend\.venv, install CUDA-enabled PyTorch, verify torch.cuda.is_available() is true, install the app backend, clone Tencent-Hunyuan/HunyuanVideo-1.5 to your chosen HUNYUAN_ROOT, apply the Windows generate.py HashStore patch from step 5, install Hunyuan requirements into the same backend venv, download checkpoints per docs/models_setup.md into CKPTS_ROOT, run the direct python smoke test with --rewrite false and --sr false, configure backend\.env with absolute paths for HUNYUAN_15_REPO_PATH and HUNYUAN_15_MODEL_PATH, then run backend and frontend.
 
 Stop and report the exact command output if nvidia-smi, torch.cuda.is_available(), checkpoint download, direct Hunyuan generation, backend startup, or frontend startup fails.
 ```

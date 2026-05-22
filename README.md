@@ -1,6 +1,6 @@
 # Video-Generator
 
-Offline video generation app powered by HunyuanVideo-1.5. See [installation.md](installation.md) for the full Windows + NVIDIA GPU setup guide.
+Offline video generation app powered by HunyuanVideo-1.5. See [docs/installation.md](docs/installation.md) for the full Windows + NVIDIA GPU setup guide.
 
 ---
 
@@ -35,6 +35,24 @@ Copy `offline-video-generator/.env.example` to `offline-video-generator/backend/
 
 For the full list of models to download, download links, file placement, and the Windows compatibility patch for `generate.py`, see **[docs/models_setup.md](docs/models_setup.md)**.
 
+## Documentation
+
+All documentation lives in [`docs/`](docs/):
+
+| File | Purpose |
+|---|---|
+| [installation.md](docs/installation.md) | Full Windows + NVIDIA GPU setup guide |
+| [models_setup.md](docs/models_setup.md) | Model download guide, file placement, current status |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture, layers, data flow, DB schema |
+| [CODEBASE.md](docs/CODEBASE.md) | File-by-file code reference |
+| [FEATURES.md](docs/FEATURES.md) | Current features, known bugs, future roadmap |
+| [app_overview.md](docs/app_overview.md) | App-level overview and quick-start |
+| [backend_api.md](docs/backend_api.md) | API endpoint reference |
+| [bootstrap_online.md](docs/bootstrap_online.md) | One-time online bootstrap steps |
+| [package_offline.md](docs/package_offline.md) | Offline runtime packaging |
+| [audit.md](docs/audit.md) | Full audit: bugs with fixes, security, performance, future scope |
+| [pipeline_spec.md](docs/pipeline_spec.md) | Original implementation spec and build status |
+
 ---
 
 ## Project Structure
@@ -42,7 +60,17 @@ For the full list of models to download, download links, file placement, and the
 ```
 Video-Generator/
 ├── docs/
-│   └── models_setup.md          # Model download guide
+│   ├── installation.md          # Full Windows setup guide
+│   ├── models_setup.md          # Model download guide
+│   ├── ARCHITECTURE.md          # System architecture
+│   ├── CODEBASE.md              # File-by-file code reference
+│   ├── FEATURES.md              # Features, bugs, roadmap
+│   ├── app_overview.md          # App overview and quick-start
+│   ├── backend_api.md           # API endpoint reference
+│   ├── bootstrap_online.md      # Online bootstrap steps
+│   ├── package_offline.md       # Offline packaging
+│   ├── pipeline_spec.md         # Original implementation spec
+│   └── audit.md                 # Full audit report with fixes
 ├── offline-video-generator/
 │   ├── .env.example             # Copy to backend/.env and fill in model paths
 │   ├── backend/
@@ -50,7 +78,6 @@ Video-Generator/
 │   │   ├── .venv/               # Python venv (gitignored)
 │   │   └── app/
 │   └── frontend/
-├── installation.md              # Full Windows setup guide
 └── README.md
 ```
 
