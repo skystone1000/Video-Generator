@@ -27,7 +27,30 @@
       "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\README.md\")",
       "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\backend\\\\README.md\")",
       "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\scripts\\\\bootstrap_online.md\")",
-      "PowerShell(New-Item *)"
+      "PowerShell(New-Item *)",
+      "Bash(Get-ChildItem -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\ckpts\" -Recurse -File)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(Get-ChildItem -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\ckpts\" -Recurse -File | Select-Object FullName, @{N='SizeMB';E={[math]::Round\\($_.Length/1MB,1\\)}} | Format-Table -AutoSize)",
+      "PowerShell(Start-Sleep -Seconds 2; Invoke-RestMethod -Uri \"http://127.0.0.1:8000/api/presets\" -Method GET | ConvertTo-Json)",
+      "PowerShell(Invoke-RestMethod -Uri \"http://127.0.0.1:8000/api/assets/2\" -Method GET | ConvertTo-Json)",
+      "PowerShell(git config *)",
+      "PowerShell(git *)",
+      "PowerShell(Get-Content \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\generate.py\" | Select-Object -First 45 | ForEach-Object -Begin {$i=1} -Process {\"$i`: $_\"; $i++})",
+      "PowerShell(Invoke-RestMethod -Uri \"http://127.0.0.1:8000/api/jobs/7\" | Select-Object status, error_message, current_stage | ConvertTo-Json)",
+      "PowerShell(& \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\backend\\\\.venv\\\\Scripts\\\\pip.exe\" install \"huggingface-hub>=0.34.0,<1.0\" 2>&1 | Select-Object -Last 10)",
+      "PowerShell(& \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import huggingface_hub; print\\(huggingface_hub.__version__\\)\")",
+      "PowerShell(& \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" -c \"import torch; print\\(torch.__version__\\); import torch.distributed as dist; print\\([a for a in dir\\(dist\\) if 'store' in a.lower\\(\\) or 'Store' in a]\\)\")",
+      "PowerShell(Get-Content \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\generate.py\" | Select-Object -Skip 36 -First 15 | ForEach-Object -Begin {$i=37} -Process {\"$i`: $_\"; $i++})",
+      "PowerShell(Select-String -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\hyvideo\\\\pipelines\\\\hunyuan_video_pipeline.py\" -Pattern \"480p|720p|transformer|ideal_resolution|step_distill|distilled\" | Select-Object -First 40 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line\\)\" })",
+      "PowerShell(Select-String -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\generate.py\" -Pattern \"transformer|model_path|create_pipeline|checkpoint|folder\" | Select-Object -First 30 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line\\)\" })",
+      "PowerShell(Select-String -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\hyvideo\\\\pipelines\\\\hunyuan_video_pipeline.py\" -Pattern \"get_transformer_version|transformer_version|TRANSFORMER_VERSION\" | Select-Object -First 20 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line\\)\" })",
+      "PowerShell(Select-String -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\generate.py\" -Pattern \"cfg_distilled|step_distill|enable_step\" | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line\\)\" })",
+      "PowerShell(Get-PSDrive C | Select-Object @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,1\\)}}, @{N='UsedGB';E={[math]::Round\\($_.Used/1GB,1\\)}}, @{N='TotalGB';E={[math]::Round\\(\\($_.Free+$_.Used\\)/1GB,1\\)}})",
+      "PowerShell(Select-String -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\generate.py\" -Pattern \"quant_type|quantiz\" | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line\\)\" })",
+      "PowerShell(Select-String -Path \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\hyvideo\\\\pipelines\\\\hunyuan_video_pipeline.py\" -Pattern \"quant_type|quantiz|int8|nf4|bnb\" | Select-Object -First 20 | ForEach-Object { \"$\\($_.LineNumber\\): $\\($_.Line\\)\" })",
+      "PowerShell(Get-Content \"E:\\\\models\\\\HunyuanVideo-1.5\\\\src\\\\hyvideo\\\\pipelines\\\\hunyuan_video_pipeline.py\" | Select-Object -Skip 1466 -First 60 | ForEach-Object -Begin {$i=1467} -Process {\"$i`: $_\"; $i++})",
+      "PowerShell(Get-Volume *)",
+      "PowerShell(Get-PSDrive C | Select-Object @{N='FreeGB';E={[math]::Round\\($_.Free/1GB,1\\)}})"
     ]
   }
 }
