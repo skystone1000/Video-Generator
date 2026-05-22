@@ -61,7 +61,9 @@ Single-page React app (TypeScript + Vite). No server-side rendering. Talks to th
 
 State is managed by a module-level singleton (`useGenerationStore.ts`) exposed through React's `useSyncExternalStore`. This avoids React Context and keeps state outside the component tree.
 
-Polling: `window.setInterval(refresh, 1500)` in `App.tsx` fires `Promise.all` against four endpoints simultaneously every 1.5 s.
+Polling: adaptive `setTimeout` loop in `App.tsx`. Fires every 1.5 s when any job is in an active state (`queued`, `loading_model`, `generating`, `postprocessing`), backs off to 8 s when idle.
+
+An `<ErrorBoundary>` component wraps `<App>` in `main.tsx` to catch unhandled React exceptions and display an error screen with a "Try again" button instead of a blank page.
 
 ### 2. API Layer (FastAPI)
 
@@ -89,19 +91,22 @@ All adapters inherit `VideoGenerationAdapter` (ABC):
 ```
 VideoGenerationAdapter (ABC)
 ├── generate(job, request, settings, callbacks) → str  (output path)
+├── cancel()   — terminates the running subprocess (SIGTERM then SIGKILL)
 └── cleanup()
 
 Concrete:
-├── MockVideoAdapter      — ffmpeg testsrc2, simulated progress
-├── HunyuanOriginalAdapter — calls python3 sample_video.py (original HunyuanVideo)
+├── MockVideoAdapter       — ffmpeg testsrc2, simulated progress
+├── HunyuanOriginalAdapter — calls sys.executable sample_video.py (original HunyuanVideo)
 └── Hunyuan15Adapter       — calls python.exe generate.py (HunyuanVideo-1.5, Windows-safe)
 ```
+
+Both real adapters store `_proc: subprocess.Popen | None`. On `cancel()` they call `proc.terminate()` and wait up to 5 s before `proc.kill()`. Progress is parsed from subprocess stdout via `_STEP_RE = re.compile(r"\b(\d+)/(\d+)\b")`, matching tqdm-style (`15/30`) and log-style (`step 5/30`) output.
 
 `Hunyuan15Adapter` derives the python executable path from the configured `torchrun.exe` path (same `Scripts/` directory), then spawns `python.exe generate.py` with the model arguments. Stdout/stderr are piped to `logs.txt` in the job output directory.
 
 ### 5. Persistence
 
-**SQLite** via SQLAlchemy 2.0 (sync sessions). Database file: `backend/data/app.db`. Three tables: `jobs`, `assets`, `presets`.
+**SQLite** via SQLAlchemy 2.0 (sync sessions, `StaticPool` for thread safety). Database file: `backend/data/app.db`. Three tables: `jobs`, `assets`, `presets`. `init_db()` runs an idempotent ALTER TABLE migration to add any missing columns (e.g. `updated_at`) to existing databases.
 
 **Filesystem** layout under `backend/data/`:
 ```
@@ -226,7 +231,7 @@ Key environment variables:
 | `HUNYUAN_15_ENABLE_SR` | `false` | super-resolution |
 | `HUNYUAN_15_USE_SAGE_ATTN` | `false` | SageAttention |
 | `HUNYUAN_15_ENABLE_CACHE` | `false` | TeaCache |
-| `MAX_ACTIVE_JOBS` | `1` | concurrent jobs (locked to 1 by validator) |
+| `MAX_ACTIVE_JOBS` | `1` | concurrent jobs (1–8, validated) |
 | `DEFAULT_PRESET` | `standard` | preset name used when none specified |
 | `FFMPEG_PATH` | `ffmpeg` | ffmpeg binary |
 | `FFPROBE_PATH` | `ffprobe` | ffprobe binary |
@@ -236,16 +241,18 @@ Key environment variables:
 ## Frontend Component Tree
 
 ```
-App.tsx
-├── leftRail
-│   ├── PromptPanel         — textarea, negative prompt, generate button
-│   └── SettingsPanel       — preset selector, resolution, steps, CFG, etc.
-├── centerStage
-│   ├── PreviewPanel        — displays currently selected asset
-│   └── AssetGallery        — grid of completed assets with thumbnails
-└── rightRail
-    ├── SystemInfo          — backend status, GPU info
-    └── QueuePanel          — active + queued jobs with progress bars
+main.tsx
+└── ErrorBoundary           — catches unhandled React exceptions; shows error + "Try again"
+    └── App.tsx
+        ├── leftRail
+        │   ├── PromptPanel         — textarea, negative prompt, generate button
+        │   └── SettingsPanel       — preset selector, resolution, steps, CFG, etc.
+        ├── centerStage
+        │   ├── PreviewPanel        — displays currently selected asset
+        │   └── AssetGallery        — grid of completed assets with thumbnails
+        └── rightRail
+            ├── SystemInfo          — backend status, GPU info
+            └── QueuePanel          — active + queued jobs with progress bars
 ```
 
 State shape (`useGenerationStore`):

@@ -32,11 +32,13 @@ Video-Generator/
 │   │       │   ├── storage.py
 │   │       │   ├── thumbnails.py
 │   │       │   └── serialization.py
-│   │       └── runtime/
-│   │           ├── base.py
-│   │           ├── mock_adapter.py
-│   │           ├── hunyuan_original_adapter.py
-│   │           └── hunyuan_15_adapter.py
+│   │       ├── runtime/
+│   │       │   ├── base.py
+│   │       │   ├── mock_adapter.py
+│   │       │   ├── hunyuan_original_adapter.py
+│   │       │   └── hunyuan_15_adapter.py
+│   │       └── tests/
+│   │           └── test_adapter_commands.py
 │   └── frontend/
 │       ├── package.json
 │       ├── vite.config.ts
@@ -49,13 +51,13 @@ Video-Generator/
 │           ├── state/
 │           │   └── useGenerationStore.ts
 │           └── components/
+│               ├── ErrorBoundary.tsx
 │               ├── PromptPanel.tsx
 │               ├── SettingsPanel.tsx
 │               ├── PreviewPanel.tsx
 │               ├── AssetGallery.tsx
 │               ├── QueuePanel.tsx
 │               └── SystemInfo.tsx
-├── installation.md
 ├── README.md
 └── .gitignore
 ```
@@ -68,7 +70,9 @@ Video-Generator/
 
 FastAPI application entry point.
 
-- `lifespan(app)` — async context manager: calls `init_db()`, `seed_default_presets()`, `generation_queue.start()` on startup. Stops the queue on shutdown.
+- `lifespan(app)` — async context manager: calls `_configure_logging()`, `_warn_missing_paths()`, `init_db()`, `seed_default_presets()`, `generation_queue.start()` on startup. Stops the queue on shutdown.
+- `_configure_logging()` — sets up `logging.basicConfig` with both a `StreamHandler` and a `FileHandler` writing to `LOG_DIR/app.log`.
+- `_warn_missing_paths()` — emits `logging.WARNING` (non-fatal) if `HUNYUAN_15_REPO_PATH` or `HUNYUAN_15_MODEL_PATH` do not exist on disk when the runtime is `hunyuan_15`.
 - CORS middleware configured with a regex matching any port on `localhost` or `127.0.0.1`.
 - Four routers registered: `jobs_router`, `assets_router`, `presets_router`, `system_router` — all under `/api` prefix.
 - Static file mounts: `/outputs` → `OUTPUT_DIR`, `/thumbnails` → `THUMBNAIL_DIR`.
@@ -97,7 +101,7 @@ class Settings(BaseSettings):
     hunyuan_15_enable_sr: bool = False
     hunyuan_15_use_sage_attn: bool = False
     hunyuan_15_enable_cache: bool = False
-    max_active_jobs: int = Field(default=1, ge=1, le=1)  # locked to 1
+    max_active_jobs: int = Field(default=1, ge=1, le=8)  # 1–8 concurrent jobs
     default_preset: str = "standard"
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
@@ -116,10 +120,11 @@ def resolve_path(path: str) -> Path:
 SQLAlchemy 2.0 setup.
 
 ```python
-engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
+# SQLite: StaticPool + check_same_thread=False for thread-safe concurrent access
+engine = create_engine(settings.database_url, connect_args={"check_same_thread": False}, poolclass=StaticPool)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-def init_db():           # called at startup — creates tables
+def init_db():           # called at startup — creates tables; runs ALTER TABLE migrations idempotently
 def get_db() -> Session  # FastAPI dependency — yields a session, closes on exit
 ```
 
@@ -141,12 +146,12 @@ SQLAlchemy ORM models.
 Pydantic v2 request/response schemas.
 
 ```python
-RuntimeName = Literal["mock", "hunyuan_original", "hunyuan_15", "diffusers_hunyuan"]
+RuntimeName = Literal["mock", "hunyuan_original", "hunyuan_15"]
 
 class GenerationRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
-    runtime: RuntimeName = "mock"
+    runtime: RuntimeName = "hunyuan_15"
     resolution: str = "480p"
     width: int = 854
     height: int = 480
@@ -167,7 +172,6 @@ class PresetResponse(BaseModel)
 class SystemStatusResponse(BaseModel)
 ```
 
-Note: `diffusers_hunyuan` appears in `RuntimeName` but has no corresponding adapter.
 
 ---
 
@@ -175,7 +179,7 @@ Note: `diffusers_hunyuan` appears in `RuntimeName` but has no corresponding adap
 
 ```
 POST   /jobs              create_job(request: GenerationRequest) → JobResponse
-GET    /jobs              list_jobs() → list[JobResponse]         (last 100, desc)
+GET    /jobs              list_jobs(limit=50, offset=0) → list[JobResponse]   (max 200, desc)
 GET    /jobs/{id}         get_job(id) → JobResponse
 POST   /jobs/{id}/cancel  cancel_job(id) → JobResponse
 POST   /jobs/{id}/rerun   rerun_job(id) → JobResponse             (clones job, enqueues)
@@ -183,18 +187,18 @@ POST   /jobs/{id}/variation create_variation(id, overrides) → JobResponse
 WS     /jobs/{id}/events  stream_job_events(id)                   (unused by frontend)
 ```
 
-`cancel_job` adds the job ID to `GenerationQueue._cancel_requested`. This only works for jobs still in `queued` state — running subprocess jobs cannot be cancelled.
+`cancel_job` adds the job ID to `GenerationQueue._cancel_requested` and calls `adapter.cancel()` if the job is currently running. For queued jobs this prevents them from starting; for running jobs it terminates the subprocess.
 
 ---
 
 ### `app/api/assets.py`
 
 ```
-GET    /assets            list_assets() → list[AssetResponse]    (last 200, desc)
+GET    /assets            list_assets(limit=50, offset=0) → list[AssetResponse]   (max 200, desc)
 GET    /assets/{id}/video FileResponse (mp4)
 GET    /assets/{id}/thumbnail FileResponse (jpeg)
 PATCH  /assets/{id}       update favorite/tags → AssetResponse
-DELETE /assets/{id}       deletes DB record only (files remain on disk)
+DELETE /assets/{id}       deletes DB record + video/thumbnail/metadata files from disk
 ```
 
 ---
@@ -223,7 +227,7 @@ GET /system/status   → SystemStatusResponse
 GET /system/config   → dict of non-sensitive settings
 ```
 
-GPU info uses `subprocess("nvidia-smi ...")` — returns null if nvidia-smi unavailable.
+GPU info uses `subprocess("nvidia-smi ...")` — returns null if nvidia-smi unavailable. Result is cached in-process for 15 s (`_GPU_TTL`) to avoid spawning a subprocess on every poll.
 
 ---
 
@@ -324,6 +328,10 @@ class VideoGenerationAdapter(ABC):
     ) -> str:  # returns path to output video
         ...
 
+    def cancel(self) -> None:
+        # Subclasses that spawn a subprocess override this to terminate it.
+        pass
+
     def cleanup(self):
         pass
 ```
@@ -345,10 +353,10 @@ Simulates generation for development/testing.
 Calls the original HunyuanVideo (not 1.5) via:
 
 ```bash
-python3 sample_video.py --video-size H W --video-length N --infer-steps S ...
+<sys.executable> sample_video.py --video-size H W --video-length N --infer-steps S ...
 ```
 
-No Windows compatibility fix applied. Likely broken on Windows for the same libuv reason.
+Uses `sys.executable` (not hardcoded `python3`) and sets `USE_LIBUV=0` in the subprocess environment for Windows compatibility. Stores `_proc` handle; `cancel()` terminates the subprocess. Progress parsing via `_STEP_RE`.
 
 ---
 
@@ -359,6 +367,8 @@ Calls HunyuanVideo-1.5.
 Key design:
 
 ```python
+_STEP_RE = re.compile(r"\b(\d+)/(\d+)\b")  # matches tqdm and "step X/Y" patterns
+
 def _python_from_torchrun(torchrun_path: str) -> str:
     # derives python.exe from torchrun.exe (same Scripts/ directory)
     # e.g. .venv/Scripts/torchrun.exe → .venv/Scripts/python.exe
@@ -368,9 +378,13 @@ def build_command(request, settings) -> list[str]:
 
 def generate(job, request, settings, on_progress) -> str:
     env = {**os.environ, "USE_LIBUV": "0"}
-    proc = subprocess.Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, cwd=repo_path)
-    # streams output to logs.txt
+    self._proc = subprocess.Popen(cmd, stdout=PIPE, stderr=STDOUT, env=env, cwd=repo_path)
+    # streams stdout line-by-line; parses _STEP_RE to call on_progress()
+    # try/finally ensures _proc is cleaned up and self._proc reset to None
     # returns output video path
+
+def cancel(self) -> None:
+    # terminates self._proc (SIGTERM → wait 5s → SIGKILL)
 ```
 
 Arguments passed to `generate.py`:
@@ -397,9 +411,11 @@ Arguments passed to `generate.py`:
 
 ### `src/App.tsx`
 
-Root component. Sets up the polling interval (`setInterval(refresh, 1500)`) and three-column layout.
+Root component. Sets up an adaptive polling loop and three-column layout.
 
 `refresh()` calls `Promise.all([getSystemStatus(), listJobs(), listAssets(), listPresets()])` and updates the store.
+
+Polling uses `setTimeout` (not `setInterval`): reschedules at 1.5 s if any job is in an active state, 8 s when idle. Clears timer on unmount.
 
 ---
 
@@ -426,7 +442,13 @@ submitJob(): Promise<void>
 cancelJob(id: number): Promise<void>
 ```
 
-Default `generationRequest.runtime` is `"mock"` — user must switch to `"hunyuan_15"` via the preset selector.
+Default `generationRequest.runtime` is `"hunyuan_15"`. Default preset is `"hunyuan-480p-fast"`.
+
+---
+
+### `src/components/ErrorBoundary.tsx`
+
+React class component that wraps `<App>` in `main.tsx`. Catches any unhandled exception in the component tree via `getDerivedStateFromError` / `componentDidCatch`, shows the error message and a "Try again" button (resets error state), and logs to `console.error`.
 
 ---
 
@@ -443,6 +465,25 @@ listAssets(): Promise<Asset[]>
 updateAsset(id, patch): Promise<Asset>
 deleteAsset(id): Promise<void>
 listPresets(): Promise<Preset[]>
+```
+
+---
+
+## Tests
+
+### `backend/tests/test_adapter_commands.py`
+
+Unit tests for adapter command construction. No GPU or real model files required — `subprocess.Popen` and `get_settings` are mocked.
+
+Classes:
+- `TestHunyuan15AdapterCommand` (10 tests) — verifies prompt, seed, offload flag, fp8, rewrite flag, output path, command is a list of strings, executable is `python.exe` not `torchrun`.
+- `TestHunyuanOriginalAdapterCommand` (3 tests) — verifies `sys.executable`, prompt, list type.
+- `TestProgressRegex` (3 tests) — verifies `_STEP_RE` matches tqdm-style and log-style output and ignores plain text.
+
+Run:
+```powershell
+cd offline-video-generator/backend
+pytest tests/test_adapter_commands.py -v
 ```
 
 ---

@@ -34,20 +34,20 @@ export const defaultRequest: GenerationRequest = {
   prompt: "cinematic shot of a futuristic city at sunrise, slow drifting camera",
   negative_prompt: "",
   aspect_ratio: "16:9",
-  resolution: "720p",
-  width: 1280,
-  height: 720,
-  video_length: 129,
+  resolution: "480p",
+  width: 854,
+  height: 480,
+  video_length: 29,
   fps: 24,
-  steps: 50,
+  steps: 12,
   seed: null,
   cfg_scale: 6,
-  flow_shift: 7,
+  flow_shift: 5,
   use_cpu_offload: true,
   use_fp8: false,
   rewrite_prompt: false,
-  preset: "standard",
-  runtime: "mock"
+  preset: "hunyuan-480p-fast",
+  runtime: "hunyuan_15"
 };
 
 export function setGenerationState(patch: Partial<GenerationState>) {

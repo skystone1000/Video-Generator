@@ -138,11 +138,12 @@ export function SettingsPanel({ request, onChange }: SettingsPanelProps) {
           />
           <span>FP8</span>
         </label>
-        <label>
+        <label title="Prompt rewriting is not yet implemented" style={{ opacity: 0.4, cursor: "not-allowed" }}>
           <input
             type="checkbox"
-            checked={request.rewrite_prompt}
-            onChange={(event) => onChange({ rewrite_prompt: event.target.checked })}
+            checked={false}
+            disabled
+            onChange={() => undefined}
           />
           <span>Rewrite</span>
         </label>

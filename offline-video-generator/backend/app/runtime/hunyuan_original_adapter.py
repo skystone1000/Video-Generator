@@ -1,13 +1,30 @@
+import os
+import re
 import subprocess
+import sys
 from pathlib import Path
 
 from ..config import get_settings
 from .base import GenerationResult, ProgressCallback, VideoGenerationAdapter
 
+_STEP_RE = re.compile(r"\b(\d+)/(\d+)\b")
+
 
 class HunyuanOriginalAdapter(VideoGenerationAdapter):
     name = "hunyuan_original"
     model_version = "Tencent-Hunyuan/HunyuanVideo"
+
+    def __init__(self) -> None:
+        self._proc: subprocess.Popen | None = None
+
+    def cancel(self) -> None:
+        proc = self._proc
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
 
     def validate(self) -> None:
         settings = get_settings()
@@ -32,7 +49,7 @@ class HunyuanOriginalAdapter(VideoGenerationAdapter):
         assert ckpt_path is not None
 
         command = [
-            "python3",
+            sys.executable,
             str(repo_path / "sample_video.py"),
             "--video-size",
             str(request.height),
@@ -63,6 +80,8 @@ class HunyuanOriginalAdapter(VideoGenerationAdapter):
         command = self.build_command(request, output_path)
         progress(0.05, "generating", "starting HunyuanVideo subprocess")
 
+        env = {**os.environ, "USE_LIBUV": "0"}
+        last_progress = 0.05
         with logs_path.open("w", encoding="utf-8") as log_file:
             process = subprocess.Popen(
                 command,
@@ -70,14 +89,29 @@ class HunyuanOriginalAdapter(VideoGenerationAdapter):
                 stderr=subprocess.STDOUT,
                 text=True,
                 cwd=str(get_settings().resolve_path(get_settings().hunyuan_original_repo_path)),
+                env=env,
             )
             assert process.stdout is not None
-            for line in process.stdout:
-                log_file.write(line)
-                log_file.flush()
-            return_code = process.wait()
+            self._proc = process
+            try:
+                for line in process.stdout:
+                    log_file.write(line)
+                    log_file.flush()
+                    m = _STEP_RE.search(line)
+                    if m:
+                        current, total = int(m.group(1)), int(m.group(2))
+                        if total > 0 and 0 <= current <= total:
+                            last_progress = 0.05 + 0.90 * (current / total)
+                            progress(last_progress, "generating", f"Step {current}/{total}")
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                process.wait()
+                self._proc = None
 
+        return_code = process.returncode
         if return_code != 0:
+            progress(last_progress, "generating")
             raise RuntimeError(f"HunyuanVideo exited with code {return_code}. See {logs_path}.")
 
         candidates = sorted(output_path.glob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)

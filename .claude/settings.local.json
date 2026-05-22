@@ -26,7 +26,8 @@
       "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\video_generator_pipeline.md\")",
       "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\README.md\")",
       "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\backend\\\\README.md\")",
-      "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\scripts\\\\bootstrap_online.md\")"
+      "Bash(Remove-Item \"C:\\\\Users\\\\adity\\\\Documents\\\\CSE\\\\GitHub\\\\Video-Generator\\\\offline-video-generator\\\\scripts\\\\bootstrap_online.md\")",
+      "PowerShell(New-Item *)"
     ]
   }
 }

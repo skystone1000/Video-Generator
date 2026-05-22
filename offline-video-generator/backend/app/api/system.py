@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,9 @@ from ..services.model_manager import model_manager
 from ..services.queue import generation_queue
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+_gpu_cache: dict = {"ts": 0.0, "result": None}
+_GPU_TTL = 15.0  # seconds
 
 
 @router.get("/status", response_model=SystemStatus)
@@ -25,10 +30,16 @@ def get_status(session: Session = Depends(get_session)) -> SystemStatus:
 
 @router.get("/gpu", response_model=GpuStatus)
 def get_gpu() -> GpuStatus:
+    now = time.time()
+    if _gpu_cache["result"] is not None and now - _gpu_cache["ts"] < _GPU_TTL:
+        return _gpu_cache["result"]
+
     try:
         import torch
     except Exception as exc:
-        return GpuStatus(available=False, error=f"PyTorch unavailable: {exc}")
+        result = GpuStatus(available=False, error=f"PyTorch unavailable: {exc}")
+        _gpu_cache.update({"ts": now, "result": result})
+        return result
 
     try:
         available = bool(torch.cuda.is_available())
@@ -43,6 +54,9 @@ def get_gpu() -> GpuStatus:
                         "total_memory_gb": round(props.total_memory / (1024**3), 2),
                     }
                 )
-        return GpuStatus(available=available, devices=devices)
+        result = GpuStatus(available=available, devices=devices)
     except Exception as exc:
-        return GpuStatus(available=False, error=str(exc))
+        result = GpuStatus(available=False, error=str(exc))
+
+    _gpu_cache.update({"ts": now, "result": result})
+    return result

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .models import JobStatus
 
 
-RuntimeName = Literal["mock", "hunyuan_original", "hunyuan_15", "diffusers_hunyuan"]
+RuntimeName = Literal["mock", "hunyuan_original", "hunyuan_15"]
 
 
 class GenerationRequest(BaseModel):

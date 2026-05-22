@@ -37,3 +37,6 @@ class VideoGenerationAdapter(ABC):
     @abstractmethod
     def unload(self) -> None:
         ...
+
+    def cancel(self) -> None:
+        """Attempt to stop an in-progress generation. Default is a no-op for adapters that don't use subprocesses."""

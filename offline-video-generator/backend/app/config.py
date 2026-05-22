@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     ffmpeg_path: str = "ffmpeg"
     ffprobe_path: str = "ffprobe"
 
-    max_active_jobs: int = Field(default=1, ge=1, le=1)
+    max_active_jobs: int = Field(default=1, ge=1, le=8)
     default_preset: str = "standard"
 
     model_config = SettingsConfigDict(

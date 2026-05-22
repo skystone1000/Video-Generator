@@ -15,7 +15,7 @@
 - Video preview: click any asset to play it in the center panel
 - Favorite/unfavorite assets
 - Tag assets (freeform JSON array)
-- Delete asset (removes DB record)
+- Delete asset (removes DB record **and** video/thumbnail/metadata files from disk)
 
 ### Preset Management
 - Create, edit, and delete presets via the UI
@@ -23,104 +23,34 @@
 - Presets store the full `GenerationRequest` including runtime selection
 
 ### Job Operations
-- Cancel a queued job (before it starts processing)
+- Cancel a queued or running job (queued jobs are dropped; running subprocess is terminated via SIGTERM/SIGKILL)
 - Rerun a completed/failed job (clones settings, enqueues new job)
 - Create a variation (rerun with partial setting overrides)
 
 ### System
-- System status panel: backend health, queue depth, active job count, GPU VRAM info
+- System status panel: backend health, queue depth, active job count, GPU VRAM info (cached 15 s)
+- Real-time step progress: `Inference step X/Y` parsed from subprocess stdout and pushed to the progress bar
+- Adaptive frontend polling: 1.5 s while jobs are active, 8 s when idle
+- Startup warnings logged if model paths are missing or misconfigured
 - Offline-first: no external services required at runtime (models stored locally)
 - Windows + NVIDIA GPU support
 
 ---
 
-## Bugs
+## Known Limitations
 
-### Critical
-
-**1. `max_active_jobs` locked to exactly 1**
-- File: `app/config.py`, `max_active_jobs: int = Field(default=1, ge=1, le=1)`
-- The validator `ge=1, le=1` enforces exactly 1. Setting `MAX_ACTIVE_JOBS=2` in `.env` is silently clamped to 1. The queue logic (`queue.py`) checks `active_jobs >= max_active_jobs` but can never scale up.
-- Impact: multi-GPU or future parallel generation is impossible without a code change.
-
-**2. Active job subprocess cannot be cancelled**
-- File: `app/services/queue.py`, `_process_job()`
-- `_cancel_requested` only prevents a queued job from starting. Once `subprocess.Popen` is called, no process handle is stored — there is no way to kill the running inference.
-- Impact: clicking "Cancel" on a running job has no effect. The job runs to completion (or error), and the cancel flag is ignored.
-
-**3. Asset file cleanup missing on delete**
-- File: `app/api/assets.py`, `DELETE /assets/{id}`
-- The handler deletes the SQLite record but leaves `output.mp4`, `thumbnail.jpg`, and `metadata.json` on disk.
-- Impact: disk fills up silently over time.
-
-**4. `diffusers_hunyuan` runtime stub**
-- File: `app/schemas.py` — `RuntimeName` includes `"diffusers_hunyuan"`.
-- File: `app/services/model_manager.py` — no branch handles this runtime.
-- Impact: selecting this runtime raises an unhandled exception in the queue thread, marking the job failed with an opaque error.
-
-**5. Prompt rewriting wired in UI but absent in backend**
-- File: `app/schemas.py` — `rewrite_prompt: bool = False` accepted.
-- File: `app/models.py` — `rewritten_prompt` column exists.
-- File: `app/api/jobs.py` — no code performs rewriting; `rewritten_prompt` is never populated.
-- File: `app/runtime/hunyuan_15_adapter.py` — uses `rewritten_prompt if set, else prompt`, so it correctly falls through to `prompt`, but the feature appears broken to the user who enabled it.
-- Impact: "Rewrite prompt" toggle is a no-op silently.
-
-**6. `HunyuanOriginalAdapter` missing Windows fix**
-- File: `app/runtime/hunyuan_original_adapter.py`
-- Still calls `python3 sample_video.py` (not `python.exe`) and does not set `USE_LIBUV=0`. On Windows this will fail with the same libuv error that was fixed in `Hunyuan15Adapter`.
-- Impact: `hunyuan_original` runtime always fails on Windows.
-
----
-
-### Moderate
-
-**7. Aggressive frontend polling**
-- File: `offline-video-generator/frontend/src/App.tsx`, `setInterval(refresh, 1500)`
-- Every 1.5 s fires four simultaneous API requests (status, jobs, assets, presets). When no jobs are running this is pure overhead and inflates battery/CPU usage.
-- Fix: back off to 5–10 s when no active jobs; use the existing WebSocket endpoint (`/jobs/{id}/events`) to drive real-time updates during generation.
-
-**8. WebSocket endpoint unused**
+**WebSocket endpoint unused**
 - File: `app/api/jobs.py`, `@router.websocket("/jobs/{id}/events")`
-- The endpoint polls DB every 1 s and streams JSON updates over WS. The frontend never connects to it — everything goes through REST polling. The WS code is dead weight.
+- The WS endpoint exists but the frontend polls REST instead. Left in place for potential future use.
 
-**9. No progress parsing from HunyuanVideo output**
-- File: `app/runtime/hunyuan_15_adapter.py`
-- Subprocess stdout is written to `logs.txt` but never parsed for progress information. `on_progress` is never called during actual inference — the job stays at 0% until it completes or fails.
-- Impact: progress bar shows 0% for the entire inference duration (can be 10–30 minutes).
+**Prompt rewriting unimplemented**
+- `rewrite_prompt` field is accepted by the API and stored in `settings_json` but the backend never performs rewriting. The UI toggle is disabled (greyed out) to make this clear. Column `rewritten_prompt` on `Job` remains for future use.
 
-**10. No asset pagination**
-- File: `app/api/assets.py` — `list_assets()` returns up to 200 records.
-- File: `app/api/jobs.py` — `list_jobs()` returns up to 100 records.
-- Both values are hardcoded. Heavy users will hit these limits. The frontend fetches the full list every 1.5 s.
+**`seed: -1` not resolved before storage**
+- When `seed=-1`, a random seed is chosen by the adapter at generation time, but `settings_json` still stores `-1`. Rerun/variation jobs may not reproduce the exact output.
 
-**11. Default runtime in store is `"mock"`**
-- File: `frontend/src/state/useGenerationStore.ts`, `defaultRequest`
-- New users who submit without selecting a preset will get a mock video. The UI doesn't make this obvious. They may think real generation failed because they see a test-pattern output.
-
----
-
-### Minor
-
-**12. CORS regex too permissive**
-- File: `app/main.py`
-- Pattern matches any port on `localhost`/`127.0.0.1`. This is intentional for development but should be locked to the known frontend port in a hardened setup.
-
-**13. No authentication**
-- All API endpoints are unauthenticated. Acceptable for a strictly local app, but needs attention if the backend is ever exposed beyond loopback.
-
-**14. No rate limiting**
-- A client can flood `POST /jobs` and exhaust queue depth, disk space, or model VRAM without any throttle.
-
-**15. `nvidia-smi` called via subprocess on every `/system/status` request**
-- File: `app/api/system.py`
-- Called synchronously in the request handler. Adds latency (50–200 ms) to every status poll. Result should be cached with a short TTL.
-
-**16. `seed: -1` not resolved to a fixed seed before storage**
-- File: `app/api/jobs.py`, `create_job()`
-- When `seed=-1`, a random seed is chosen by the adapter at generation time, but the stored `settings_json` still shows `-1`. Rerun/variation jobs cannot reproduce the exact output because the actual seed is never persisted.
-
-**17. `LOG_DIR` created but never written to**
-- `data/logs/` is created by the storage initialisation, but the app writes logs to `stdout` and per-job `logs.txt`. The directory is unused.
+**No authentication / rate limiting**
+- All endpoints are unauthenticated. Acceptable for strictly local offline use. Not suitable for network exposure without adding auth.
 
 ---
 

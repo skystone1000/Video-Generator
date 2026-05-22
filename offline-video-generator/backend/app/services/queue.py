@@ -77,6 +77,12 @@ class GenerationQueue:
         if job.id == self.active_job_id and job.status not in TERMINAL_STATES:
             with self._lock:
                 self._cancel_requested.add(job_id)
+            # Terminate the running subprocess immediately so we don't wait for it to finish
+            try:
+                adapter = model_manager.get_adapter(model_manager.loaded_runtime or "")
+                adapter.cancel()
+            except Exception:
+                pass
             job.current_stage = "cancellation requested"
             session.commit()
             session.refresh(job)

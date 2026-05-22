@@ -22,8 +22,19 @@ def create_job(request: GenerationRequest, session: Session = Depends(get_sessio
 
 
 @router.get("", response_model=list[JobRead])
-def list_jobs(session: Session = Depends(get_session)) -> list[JobRead]:
-    jobs = session.scalars(select(Job).order_by(Job.created_at.desc(), Job.id.desc()).limit(100)).all()
+def list_jobs(
+    limit: int = 50,
+    offset: int = 0,
+    session: Session = Depends(get_session),
+) -> list[JobRead]:
+    jobs = (
+        session.scalars(
+            select(Job)
+            .order_by(Job.created_at.desc(), Job.id.desc())
+            .limit(min(limit, 200))
+            .offset(offset)
+        ).all()
+    )
     return [job_to_read(job) for job in jobs]
 
 

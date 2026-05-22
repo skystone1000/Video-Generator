@@ -15,8 +15,19 @@ router = APIRouter(prefix="/assets", tags=["assets"])
 
 
 @router.get("", response_model=list[AssetRead])
-def list_assets(session: Session = Depends(get_session)) -> list[AssetRead]:
-    assets = session.scalars(select(Asset).order_by(Asset.created_at.desc(), Asset.id.desc()).limit(200)).all()
+def list_assets(
+    limit: int = 50,
+    offset: int = 0,
+    session: Session = Depends(get_session),
+) -> list[AssetRead]:
+    assets = (
+        session.scalars(
+            select(Asset)
+            .order_by(Asset.created_at.desc(), Asset.id.desc())
+            .limit(min(limit, 200))
+            .offset(offset)
+        ).all()
+    )
     return [asset_to_read(asset) for asset in assets]
 
 
@@ -71,5 +82,20 @@ def delete_asset(asset_id: int, session: Session = Depends(get_session)) -> None
     asset = session.get(Asset, asset_id)
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found.")
+    # Delete files from disk before removing the DB record
+    for file_path in [asset.file_path, asset.thumbnail_path, asset.metadata_path, asset.preview_path]:
+        if file_path:
+            try:
+                Path(file_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+    # Remove the parent job output directory if it's now empty
+    if asset.file_path:
+        job_dir = Path(asset.file_path).parent
+        try:
+            if job_dir.is_dir() and not any(job_dir.iterdir()):
+                job_dir.rmdir()
+        except Exception:
+            pass
     session.delete(asset)
     session.commit()

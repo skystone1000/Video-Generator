@@ -63,9 +63,22 @@ export default function App() {
 
   useEffect(() => {
     refresh();
-    const timer = window.setInterval(refresh, 1500);
-    return () => window.clearInterval(timer);
-  }, []);
+    // Poll fast when a job is in progress, slow when idle to reduce CPU/battery load
+    const ACTIVE_INTERVAL = 1500;
+    const IDLE_INTERVAL = 8000;
+    let timer: number;
+    function schedule() {
+      const isActive = store.jobs.some((job) =>
+        ["queued", "loading_model", "generating", "postprocessing"].includes(job.status)
+      );
+      timer = window.setTimeout(async () => {
+        await refresh();
+        schedule();
+      }, isActive ? ACTIVE_INTERVAL : IDLE_INTERVAL);
+    }
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, [store.jobs]);
 
   async function submit() {
     setGenerationState({ loading: true, error: null });
