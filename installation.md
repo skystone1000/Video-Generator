@@ -2,22 +2,31 @@
 
 This guide is for your Windows machine with an NVIDIA GPU. Your Mac can remain the development/mock-mode machine; this Windows setup is for real HunyuanVideo-1.5 generation.
 
-Everything app-related lives inside the cloned project root:
+The app lives inside the cloned project root. Models are stored separately on any drive you choose:
 
 ```text
 <PROJECT_ROOT>\
   README.md
   installation.md
-  models\
-    HunyuanVideo-1.5\
-      generate.py
-      requirements.txt
-      ckpts\
+  docs\
+    models_setup.md
   offline-video-generator\
+    .env.example
     backend\
       .venv\
-      .env
+      .env        ← set HUNYUAN_15_REPO_PATH and HUNYUAN_15_MODEL_PATH here
     frontend\
+
+<YOUR_MODELS_DRIVE>\          ← any path on any drive
+  HunyuanVideo-1.5\
+    generate.py
+    hyvideo\
+    requirements.txt
+    ckpts\
+      transformer\
+      vae\
+      text_encoder\
+      vision_encoder\
 ```
 
 Important caveat: the official HunyuanVideo-1.5 documentation targets Linux/CUDA. Native Windows is an experimental setup path. The base Python/PyTorch stack may work, but optional CUDA extensions such as SageAttention, flex-block attention, Flash Attention, or sparse-attention paths may be harder or unsupported on native Windows. If native Windows hits a CUDA extension or distributed runtime wall, use WSL2/Linux as the fallback.
@@ -102,13 +111,18 @@ From the project root, define reusable PowerShell variables:
 
 ```powershell
 $PROJECT_ROOT = (Get-Location).Path
-$APP_ROOT = Join-Path $PROJECT_ROOT "offline-video-generator"
+$APP_ROOT     = Join-Path $PROJECT_ROOT "offline-video-generator"
 $BACKEND_ROOT = Join-Path $APP_ROOT "backend"
 $FRONTEND_ROOT = Join-Path $APP_ROOT "frontend"
-$MODELS_ROOT = Join-Path $PROJECT_ROOT "models"
-$HUNYUAN_ROOT = Join-Path $MODELS_ROOT "HunyuanVideo-1.5"
 
-Write-Host "PROJECT_ROOT = $PROJECT_ROOT"
+# Set these to wherever you want to store the model code and checkpoints.
+# Both can be on an external drive. They can be the same root folder.
+$HUNYUAN_ROOT  = "E:\models\HunyuanVideo-1.5"   # adjust to your drive/path
+$CKPTS_ROOT    = "$HUNYUAN_ROOT\ckpts"
+
+Write-Host "PROJECT_ROOT  = $PROJECT_ROOT"
+Write-Host "HUNYUAN_ROOT  = $HUNYUAN_ROOT"
+Write-Host "CKPTS_ROOT    = $CKPTS_ROOT"
 ```
 
 Expected file:
@@ -151,13 +165,31 @@ cd $BACKEND_ROOT
 pip install -e ".[dev]"
 ```
 
-## 5. Clone HunyuanVideo-1.5 Inside the Project
+## 5. Clone HunyuanVideo-1.5 to Your External Location
+
+Clone the HunyuanVideo-1.5 code repository to the path you set in `$HUNYUAN_ROOT`:
 
 ```powershell
-mkdir $MODELS_ROOT -Force
-cd $MODELS_ROOT
-git clone https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5.git
+# Create the parent directory if it doesn't exist, then clone into it
+$hunyuanParent = Split-Path $HUNYUAN_ROOT -Parent
+mkdir $hunyuanParent -Force
+git clone https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5.git $HUNYUAN_ROOT
 cd $HUNYUAN_ROOT
+```
+
+Apply the Windows compatibility patch to `generate.py`. Open `$HUNYUAN_ROOT\generate.py` and add these lines immediately after the `import` block (around line 32, after `from torch import distributed as dist`):
+
+```python
+# Windows fix: torchrun's TCPStore requires libuv which may be absent from the build.
+# Initialise the process group with HashStore when launching via plain python.
+if not dist.is_initialized():
+    _store = dist.HashStore()
+    dist.init_process_group(
+        backend="gloo",
+        store=_store,
+        rank=int(os.environ.get("RANK", "0")),
+        world_size=int(os.environ.get("WORLD_SIZE", "1")),
+    )
 ```
 
 Install HunyuanVideo-1.5 dependencies into the same backend venv:
@@ -208,30 +240,35 @@ Optional but recommended:
 huggingface-cli login
 ```
 
-Download main checkpoints:
+For download links, exact file placement, and per-model instructions see **[docs/models_setup.md](docs/models_setup.md)**.
+
+The minimum set for 480p text-to-video:
 
 ```powershell
-cd $HUNYUAN_ROOT
-hf download tencent/HunyuanVideo-1.5 --local-dir .\ckpts
-```
+cd $CKPTS_ROOT
 
-Download text encoders:
+# Main model — transformer (480p T2V only), VAE, scheduler
+hf download tencent/HunyuanVideo-1.5 `
+  --include "transformer/480p_t2v/**" "vae/**" "scheduler/**" `
+  --local-dir .
 
-```powershell
-hf download Qwen/Qwen2.5-VL-7B-Instruct --local-dir .\ckpts\text_encoder\llm
-hf download google/byt5-small --local-dir .\ckpts\text_encoder\byt5-small
-modelscope download --model AI-ModelScope/Glyph-SDXL-v2 --local_dir .\ckpts\text_encoder\Glyph-SDXL-v2
-```
+# LLM text encoder
+hf download Qwen/Qwen2.5-VL-7B-Instruct --local-dir .\text_encoder\llm
 
-For text-to-video, this is the main set. For image-to-video later, you may also need the gated FLUX.1-Redux-dev vision encoder after requesting access on Hugging Face:
+# Character text encoder (PyTorch weights only — other files are small)
+hf download google/byt5-small --include "pytorch_model.bin" --local-dir .\text_encoder\byt5-small
 
-```powershell
+# Glyph encoder
+modelscope download --model AI-ModelScope/Glyph-SDXL-v2 --local_dir .\text_encoder\Glyph-SDXL-v2
+
+# Vision encoder — GATED: request access at huggingface.co/black-forest-labs/FLUX.1-Redux-dev first
 hf download black-forest-labs/FLUX.1-Redux-dev `
-  --local-dir .\ckpts\vision_encoder\siglip `
-  --token <YOUR_HUGGING_FACE_TOKEN>
+  --include "image_encoder/**" "feature_extractor/**" `
+  --local-dir .\vision_encoder\siglip `
+  --token <YOUR_HF_TOKEN>
 ```
 
-If a download is interrupted, rerun the same command. Hugging Face downloads can resume.
+If a download is interrupted, rerun the same command — Hugging Face CLI resumes partial downloads.
 
 ## 8. Direct Hunyuan Smoke Test
 
@@ -244,7 +281,7 @@ mkdir outputs -Force
 
 $env:PYTORCH_CUDA_ALLOC_CONF="expandable_segments:True,max_split_size_mb:128"
 
-torchrun --nproc_per_node=1 generate.py `
+python generate.py `
   --prompt "a cinematic shot of a small robot watering flowers at sunrise" `
   --image_path none `
   --resolution 480p `
@@ -256,7 +293,7 @@ torchrun --nproc_per_node=1 generate.py `
   --overlap_group_offloading false `
   --sr false `
   --output_path .\outputs\smoke_test.mp4 `
-  --model_path .\ckpts
+  --model_path $CKPTS_ROOT
 ```
 
 Verify the MP4:
@@ -269,16 +306,14 @@ If direct Hunyuan generation fails, fix that before using the app. Common native
 
 ## 9. Configure the App Backend
 
-Create the env file:
+Create the env file from the example:
 
 ```powershell
 cd $BACKEND_ROOT
-copy ..\.env.example .env
+copy ..\..\.env.example .env
 ```
 
-Edit `offline-video-generator\backend\.env`.
-
-Use relative paths from the backend directory so the project folder can be moved later:
+Edit `offline-video-generator\backend\.env`. Set the two model paths to the absolute locations you chose in step 3:
 
 ```text
 APP_ENV=local
@@ -292,8 +327,12 @@ LOG_DIR=./data/logs
 
 VIDEO_RUNTIME=hunyuan_15
 
-HUNYUAN_15_REPO_PATH=../../models/HunyuanVideo-1.5
-HUNYUAN_15_MODEL_PATH=../../models/HunyuanVideo-1.5/ckpts
+# Absolute path to the cloned HunyuanVideo-1.5 code (contains generate.py)
+HUNYUAN_15_REPO_PATH=E:\models\HunyuanVideo-1.5
+
+# Absolute path to the downloaded model checkpoints
+HUNYUAN_15_MODEL_PATH=E:\models\HunyuanVideo-1.5\ckpts
+
 HUNYUAN_15_TORCHRUN_PATH=.venv/Scripts/torchrun.exe
 HUNYUAN_15_NPROC_PER_NODE=1
 HUNYUAN_15_ENABLE_SR=false
@@ -306,6 +345,8 @@ FFPROBE_PATH=ffprobe
 MAX_ACTIVE_JOBS=1
 DEFAULT_PRESET=standard
 ```
+
+Replace `E:\models\HunyuanVideo-1.5` with the actual path from your `$HUNYUAN_ROOT` variable.
 
 Keep prompt rewriting disabled in the UI. HunyuanVideo-1.5 supports rewriting, but you should only enable it after setting up a local vLLM-compatible rewrite server.
 
@@ -437,9 +478,10 @@ where torchrun
 
 Hunyuan model path errors:
 
-- Confirm `models\HunyuanVideo-1.5\ckpts` exists under the project root.
-- Confirm the text encoders exist under `models\HunyuanVideo-1.5\ckpts\text_encoder`.
-- Keep `.env` paths relative to `offline-video-generator\backend`.
+- Confirm `HUNYUAN_15_REPO_PATH` in `backend\.env` points to the folder containing `generate.py`.
+- Confirm `HUNYUAN_15_MODEL_PATH` points to the `ckpts` folder containing `transformer\`, `vae\`, and `text_encoder\`.
+- Both must be **absolute paths**. Relative paths will not resolve correctly when the backend runs.
+- See [docs/models_setup.md](docs/models_setup.md) for the expected directory structure.
 
 Out of memory:
 
@@ -480,7 +522,7 @@ Use this prompt if you want another LLM to perform the native Windows setup:
 ```text
 You are setting up a native Windows local text-to-video app using HunyuanVideo-1.5 on a Windows machine with an NVIDIA GPU.
 
-Follow installation.md exactly. Use native PowerShell, not WSL. Keep everything inside the cloned project root. Install Git, Git LFS, Python 3.10, Node LTS, ffmpeg, Visual Studio Build Tools, and the NVIDIA driver. Clone or copy the app, cd into the project root, define PROJECT_ROOT/APP_ROOT/BACKEND_ROOT/FRONTEND_ROOT/MODELS_ROOT/HUNYUAN_ROOT variables as shown, create the backend venv at offline-video-generator\backend\.venv, install CUDA-enabled PyTorch, verify torch.cuda.is_available() is true, install the app backend, clone Tencent-Hunyuan/HunyuanVideo-1.5 into models\HunyuanVideo-1.5 under the project root, install Hunyuan requirements into the same backend venv, download all required checkpoints into models\HunyuanVideo-1.5\ckpts, run the direct torchrun smoke test with --rewrite false and --sr false, configure backend\.env for VIDEO_RUNTIME=hunyuan_15 using relative paths, then run backend and frontend.
+Follow installation.md exactly. Use native PowerShell, not WSL. Install Git, Git LFS, Python 3.10, Node LTS, ffmpeg, Visual Studio Build Tools, and the NVIDIA driver. Clone or copy the app, cd into the project root, define PROJECT_ROOT/APP_ROOT/BACKEND_ROOT/FRONTEND_ROOT/HUNYUAN_ROOT/CKPTS_ROOT variables as shown (HUNYUAN_ROOT and CKPTS_ROOT point to external drives, not inside the project). Create the backend venv at offline-video-generator\backend\.venv, install CUDA-enabled PyTorch, verify torch.cuda.is_available() is true, install the app backend, clone Tencent-Hunyuan/HunyuanVideo-1.5 to your chosen HUNYUAN_ROOT, apply the Windows generate.py HashStore patch from step 5, install Hunyuan requirements into the same backend venv, download checkpoints per docs/models_setup.md into CKPTS_ROOT, run the direct python smoke test with --rewrite false and --sr false, configure backend\.env with absolute paths for HUNYUAN_15_REPO_PATH and HUNYUAN_15_MODEL_PATH, then run backend and frontend.
 
 Stop and report the exact command output if nvidia-smi, torch.cuda.is_available(), checkpoint download, direct Hunyuan generation, backend startup, or frontend startup fails.
 ```

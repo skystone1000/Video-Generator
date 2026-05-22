@@ -1,0 +1,6 @@
+# Model checkpoints and code repos are stored externally — never commit them.
+models/
+
+# OS / editor
+.DS_Store
+Thumbs.db

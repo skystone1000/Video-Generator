@@ -1,3 +1,4 @@
+import os
 import subprocess
 from pathlib import Path
 import shutil
@@ -16,6 +17,11 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
             return str(resolved) if resolved is not None else raw_path
         return raw_path
 
+    def _python_from_torchrun(self, torchrun_path: str) -> str:
+        p = Path(torchrun_path)
+        python = p.parent / ("python.exe" if p.suffix == ".exe" else "python")
+        return str(python)
+
     def validate(self) -> None:
         settings = get_settings()
         repo_path = settings.resolve_path(settings.hunyuan_15_repo_path)
@@ -31,9 +37,10 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
                 "Update Hunyuan15Adapter.build_command if the upstream entrypoint has changed."
             )
         torchrun_path = self._resolve_executable(settings.hunyuan_15_torchrun_path)
-        if shutil.which(torchrun_path) is None and not Path(torchrun_path).exists():
+        python_path = self._python_from_torchrun(torchrun_path)
+        if shutil.which(python_path) is None and not Path(python_path).exists():
             raise RuntimeError(
-                f"HunyuanVideo-1.5 torchrun executable is missing: {torchrun_path}. "
+                f"HunyuanVideo-1.5 python executable is missing: {python_path}. "
                 "Install PyTorch in the runtime environment or set HUNYUAN_15_TORCHRUN_PATH."
             )
 
@@ -47,9 +54,11 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
         assert repo_path is not None
         assert model_path is not None
 
+        torchrun_path = self._resolve_executable(settings.hunyuan_15_torchrun_path)
+        python_path = self._python_from_torchrun(torchrun_path)
+
         command = [
-            self._resolve_executable(settings.hunyuan_15_torchrun_path),
-            f"--nproc_per_node={settings.hunyuan_15_nproc_per_node}",
+            python_path,
             str(repo_path / "generate.py"),
             "--prompt",
             request.prompt,
@@ -95,6 +104,7 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
         command = self.build_command(request, output_path)
         progress(0.05, "generating", "starting HunyuanVideo-1.5 subprocess")
 
+        env = {**os.environ, "USE_LIBUV": "0"}
         with logs_path.open("w", encoding="utf-8") as log_file:
             process = subprocess.Popen(
                 command,
@@ -102,6 +112,7 @@ class Hunyuan15Adapter(VideoGenerationAdapter):
                 stderr=subprocess.STDOUT,
                 text=True,
                 cwd=str(get_settings().resolve_path(get_settings().hunyuan_15_repo_path)),
+                env=env,
             )
             assert process.stdout is not None
             for line in process.stdout:

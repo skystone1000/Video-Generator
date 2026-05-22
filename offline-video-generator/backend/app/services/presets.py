@@ -8,6 +8,26 @@ from ..models import Preset
 
 DEFAULT_PRESETS = [
     {
+        "name": "hunyuan-480p-fast",
+        "description": "Fastest real generation: 480p T2V, 29 frames, 12 steps, CPU offload on.",
+        "settings": {
+            "runtime": "hunyuan_15",
+            "aspect_ratio": "16:9",
+            "resolution": "480p",
+            "width": 854,
+            "height": 480,
+            "video_length": 29,
+            "fps": 24,
+            "steps": 12,
+            "cfg_scale": 6.0,
+            "flow_shift": 5.0,
+            "use_cpu_offload": True,
+            "use_fp8": False,
+            "rewrite_prompt": False,
+            "preset": "hunyuan-480p-fast",
+        },
+    },
+    {
         "name": "draft",
         "description": "Fast local draft settings for queue and UI checks.",
         "settings": {
